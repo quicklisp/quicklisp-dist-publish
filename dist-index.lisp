@@ -566,11 +566,6 @@ from SOURCE to TARGET."
 (defmacro with-retrying (&body body)
   `(call-with-retrying (lambda () ,@body)))
 
-(defun s3-url-exists (url)
-  (multiple-value-bind (bucket key)
-      (s3-components url)
-    (s3-object-exists bucket key)))
-
 (defun sanity-check-dist-uploads (dist)
   (let ((releases (provided-releases dist)))
     (dolist (release releases)
