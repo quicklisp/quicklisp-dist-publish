@@ -132,19 +132,10 @@
     :initarg :source-dist
     :accessor source-dist)))
 
-(defclass merged-release (release) ())
-
-(defmethod local-archive-file ((release merged-release))
-  (let ((default (call-next-method)))
-    (or (probe-file default)
-        (let* ((source (source-dist (dist release)))
-               (original-release (find-release-in-dist (name release) source)))
-          (unless original-release
-            (error "No orignal release for ~A" release))
-          (let ((original-file (probe-file (local-archive-file original-release))))
-            (unless original-file
-              (error "No original file for ~A" original-release))
-            original-file)))))
+(defclass merged-release (release)
+  ((local-archive-file
+    :initarg :local-archive-file
+    :accessor local-archive-file)))
 
 (defgeneric copy-instance (object &rest initargs))
 
@@ -180,6 +171,13 @@
                                    :release copy))
                   (provided-systems copy)))
     copy))
+
+(defmethod copy-instance ((merged-release merged-release) &rest initargs)
+  (declare (ignore initargs))
+  (let ((result (call-next-method)))
+    (setf (local-archive-file result)
+          (local-archive-file merged-release))
+    result))
 
 (defmethod find-system-in-dist (name (dist merged-dist))
   (dolist (system (provided-systems dist))
@@ -310,7 +308,11 @@ from SOURCE to TARGET."
       (when (and new-release
                  (release-equal old-release new-release))
         ;;(format t "~A is unchanged, keeping old~%" name)
-        (setf (find-release-in-dist name target) old-release))
+        (setf (find-release-in-dist name target)
+              (change-class old-release
+                            'merged-release
+                            :local-archive-file
+                            (local-archive-file old-release))))
       (when (and new-release
                  (not (release-equal old-release new-release)))
         (explain-release-difference old-release new-release))
@@ -319,7 +321,8 @@ from SOURCE to TARGET."
   (setf (version target) (date-for-today))
   (dolist (release (provided-releases target))
     (unless (typep release 'merged-release)
-      (change-class release 'merged-release)))
+      (change-class release 'merged-release
+                    :local-archive-file (local-archive-file release))))
   target)
 
 (defgeneric reinitialize-urls (object))
@@ -339,6 +342,7 @@ from SOURCE to TARGET."
     (dolist (release (provided-releases dist) (clrhash (release-index dist)))
       (multiple-value-bind (bucket key)
           (s3-components (archive-url release))
+        (declare (ignore bucket))
         (setf (archive-url release)
                      (format nil "http://~A/~A" *dist-bucket* key))))))
 
